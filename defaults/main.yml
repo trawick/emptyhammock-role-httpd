@@ -1,0 +1,5 @@
+---
+httpd_log_level: warn
+httpd_request_body_limit: 2500000
+ssl_dir: "{{ project_dir }}/ssl"
+vhost_template_file: project-vhost.conf.j2

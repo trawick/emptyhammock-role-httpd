@@ -1,0 +1,52 @@
+---
+- name: Configure system httpd to include necessary modules
+  apache2_module: state=present name={{ item }}
+  with_items:
+    - cgid
+    - deflate
+    - expires
+    - headers
+    - proxy
+    - proxy_scgi
+    - rewrite
+    - ssl
+  notify: restart system httpd
+
+- name: Create ssl directory
+  file: >
+      dest={{ ssl_dir }}
+      mode=700
+      owner=root
+      group=root
+      state=directory
+
+- name: Generate a private key
+  openssl_privatekey:
+    path: "{{ ssl_dir }}/{{ project_name }}.pem"
+  when: cert_source == "self-signed"
+
+- name: Generate an OpenSSL CSR.
+  openssl_csr:
+    path: "{{ ssl_dir }}/{{ project_name }}.csr"
+    privatekey_path: "{{ ssl_dir }}/{{ project_name }}.pem"
+    common_name: "{{ canonical_server_name }}"
+  when: cert_source == "self-signed"
+
+- name: Generate a Self Signed OpenSSL certificate
+  openssl_certificate:
+    path: "{{ ssl_dir }}/{{ project_name }}.crt"
+    privatekey_path: "{{ ssl_dir }}/{{ project_name }}.pem"
+    csr_path: "{{ ssl_dir }}/{{ project_name }}.csr"
+    provider: selfsigned
+  when: cert_source == "self-signed"
+
+- name: Configure system httpd
+  template: src={{ vhost_template_file }} dest=/etc/apache2/sites-enabled/{{ project_name }}-vhost.conf
+  notify: restart system httpd
+
+- name: Disable system httpd default site
+  command: a2dissite 000-default
+  notify: restart system httpd
+
+- name: Make sure httpd is started and will run at boot
+  service: name=apache2 state=started enabled=yes

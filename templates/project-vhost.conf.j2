@@ -1,0 +1,112 @@
+ServerAdmin {{ admin_email }}
+ServerSignature Off
+LimitRequestBody {{ httpd_request_body_limit }}
+
+<VirtualHost *:80>
+    ServerName {{ canonical_server_name }}
+    ServerAlias www.{{ canonical_server_name }}
+
+    # httpd >= 2.4.19 has per-dir Alias, which can be used to avoid mod_rewrite
+    # Ubuntu 16.04 has 2.4.18
+    RewriteEngine on
+    RewriteCond %{REQUEST_URI} !^/\.well-known/
+    RewriteRule (.*) https://{{ canonical_server_name }}$1 [R=301,L]
+
+    DocumentRoot {{ certbot_dir }}/docroot
+    <Directory {{ certbot_dir }}/docroot>
+        Require all granted
+    </Directory>
+</VirtualHost>
+
+SSLRandomSeed startup builtin
+SSLRandomSeed connect builtin
+
+SSLProtocol all -SSLv2 -SSLv3
+SSLHonorCipherOrder on
+SSLCipherSuite ECDH+AESGCM:DH+AESGCM:ECDH+AES256:DH+AES256:ECDH+AES128:DH+AES:ECDH+3DES:DH+3DES:RSA+AESGCM:RSA+AES:RSA+3DES:!aNULL:!MD5:!DSS
+SSLCompression Off
+
+SSLPassPhraseDialog  builtin
+SSLSessionCache        "shmcb:{{ log_dir }}/ssl_scache(512000)"
+SSLSessionCacheTimeout  300
+
+SSLUseStapling On
+SSLStaplingCache "shmcb:{{ log_dir }}/ssl_stapling(8192)"
+
+<VirtualHost *:443>
+    ServerName www.{{ canonical_server_name }}
+    Redirect permanent / https://{{ canonical_server_name }}/
+
+    {% if cert_source == "certbot" %}
+    SSLCertificateKeyFile {{ certbot_dir }}/config/live/{{ canonical_server_name }}/privkey.pem
+    SSLCertificateFile    {{ certbot_dir }}/config/live/{{ canonical_server_name }}/fullchain.pem
+    {% else %}
+    SSLCertificateKeyFile  {{ ssl_dir }}/{{ project_name }}.pem
+    SSLCertificateFile     {{ ssl_dir }}/{{ project_name }}.crt
+    {% endif %}
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName {{ canonical_server_name }}
+
+    CustomLog {{ log_dir }}/httpd-access.log common
+    ErrorLog syslog:local7
+    LogLevel {{ httpd_log_level }}
+
+    # DocumentRoot unused; point it to something users can access anyway
+    DocumentRoot {{ static_dir }}/
+
+    <Directory />
+        Options FollowSymLinks
+        Require all denied
+        AllowOverride None
+    </Directory>
+
+    Alias /robots.txt {{ static_dir }}/robots.txt
+    Alias /static/ {{ static_dir }}/
+    Alias /media/ {{ media_dir }}/
+
+    # plain "SetEnv" sets this too late
+    SetEnvIf Request_URI . proxy-scgi-pathinfo
+
+    ProxyPass /robots.txt !
+    ProxyPass /static/ !
+    ProxyPass /media/ !
+    ProxyPass / scgi://127.0.0.1:{{ application_port }}/
+
+    <Directory {{ static_dir }}/>
+        Require all granted
+        # only compress static+public files (see BREACH)
+        SetOutputFilter DEFLATE
+        # if they aren't naturally compressed
+        SetEnvIfNoCase Request_URI \.(?:gif|jpe?g|png)$ no-gzip
+        ExpiresActive On
+        ExpiresDefault "access plus 3 days"
+        Header set Cache-Control public
+    </Directory>
+
+    <Directory {{ media_dir }}/>
+        Require all granted
+        # only compress static+public files (see BREACH)
+        SetOutputFilter DEFLATE
+        # if they aren't naturally compressed
+        SetEnvIfNoCase Request_URI \.(?:gif|jpe?g|png)$ no-gzip
+        ExpiresActive On
+        ExpiresDefault "access plus 3 days"
+        Header set Cache-Control public
+    </Directory>
+
+    SSLEngine on
+
+    # SSL protocols/ciphers/etc. inherited from global scope
+
+    Header always set Strict-Transport-Security "max-age=31536000"
+
+    {% if cert_source == "certbot" %}
+    SSLCertificateKeyFile {{ certbot_dir }}/config/live/{{ canonical_server_name }}/privkey.pem
+    SSLCertificateFile    {{ certbot_dir }}/config/live/{{ canonical_server_name }}/fullchain.pem
+    {% else %}
+    SSLCertificateKeyFile  {{ ssl_dir }}/{{ project_name }}.pem
+    SSLCertificateFile     {{ ssl_dir }}/{{ project_name }}.crt
+    {% endif %}
+</VirtualHost>
