@@ -49,7 +49,8 @@ SSLStaplingCache "shmcb:{{ log_dir }}/ssl_stapling(8192)"
 <VirtualHost *:443>
     ServerName {{ canonical_server_name }}
 
-    CustomLog {{ log_dir }}/httpd-access.log common
+    LogFormat "%h %l %u \"%t\" \"%r\" %>s %B \"%{Referer}i\" \"%{User-Agent}i\" %D" emptyhammock
+    CustomLog {{ log_dir }}/httpd-access.log emptyhammock
     ErrorLog syslog:local7
     LogLevel {{ httpd_log_level }}
 
