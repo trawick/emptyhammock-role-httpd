@@ -8,6 +8,7 @@ LimitRequestBody {{ httpd_request_body_limit }}
 
     # httpd >= 2.4.19 has per-dir Alias, which can be used to avoid mod_rewrite
     # Ubuntu 16.04 has 2.4.18
+    # Ubuntu 18.04 has 2.4.29
     RewriteEngine on
     RewriteCond %{REQUEST_URI} !^/\.well-known/
     RewriteRule (.*) https://{{ canonical_server_name }}$1 [R=301,L]
